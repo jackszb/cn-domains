@@ -1,0 +1,46 @@
+name: Update Geosite Direct
+
+on:
+  schedule:
+    - cron: "0 0 * * *"   # 每天 UTC 00:00 自动运行
+  workflow_dispatch:       # 支持手动触发
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Install sing-box
+        run: |
+          curl -fsSL https://sing-box.app/install.sh | sh
+          sing-box version
+
+      - name: Run geosite generation
+        run: python3 generate_geosite.py
+
+      - name: Commit and Push
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add rule-set/geosite-direct.json rule-set/geosite-direct.srs
+          if ! git diff --cached --quiet; then
+            git commit -m "Update geosite-direct"
+            git push
+          else
+            echo "No changes to commit"
