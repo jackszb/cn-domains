@@ -11,6 +11,7 @@ url = "https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/a
 json_path = os.path.join(output_dir, "geosite-direct.json")
 srs_path = os.path.join(output_dir, "geosite-direct.srs")
 
+# 创建输出目录
 os.makedirs(output_dir, exist_ok=True)
 
 # 下载并解析
@@ -26,6 +27,7 @@ for line in r.text.splitlines():
                 domain = domain[4:]
             domain_suffix_list.append(domain)
 
+# 构建规则
 result = {
     "version": 3,
     "rules": [{"domain_suffix": domain_suffix_list}]
@@ -34,16 +36,18 @@ result = {
 # 输出域名数量
 print(f"Number of domains processed: {len(domain_suffix_list)}")
 
-# 判断 JSON 是否变化
-new_json = json.dumps(result, indent=4)
+# 格式化 JSON，保证整齐缩进和 UTF-8
+new_json = json.dumps(result, indent=4, ensure_ascii=False) + "\n"
+
+# 判断是否变化
 if os.path.exists(json_path):
-    with open(json_path, "r") as f:
+    with open(json_path, "r", encoding="utf-8") as f:
         old_json = f.read()
 else:
     old_json = ""
 
 if new_json != old_json:
-    with open(json_path, "w") as f:
+    with open(json_path, "w", encoding="utf-8") as f:
         f.write(new_json)
     # 生成 SRS
     subprocess.run(["sing-box", "rule-set", "compile", "--output", srs_path, json_path], check=True)
