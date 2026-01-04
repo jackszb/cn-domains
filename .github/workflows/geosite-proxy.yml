@@ -1,0 +1,70 @@
+name: Update geosite-proxy rule-set
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"  # 每周一 UTC 03:00
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download gfwlist
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt -o gfwlist.txt
+
+      - name: Decode and extract pure domains
+        run: |
+          set -e
+
+          base64 --decode --ignore-garbage gfwlist.txt > gfwlist.decoded.txt
+
+          tr -d '\r' < gfwlist.decoded.txt \
+          | grep -vE '^\s*!|^\s*$|^@@' \
+          | sed -E '
+              s#^\|\|##;
+              s#^\|##;
+              s#https?://##;
+              s#/.*##;
+              s#\*##g;
+              s#^\.##
+            ' \
+          | grep -E '^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$' \
+          | sort -u > geosite-proxy.tmp
+
+          rm -f gfwlist.txt gfwlist.decoded.txt
+
+      - name: Generate sing-box JSON (geosite-proxy.json)
+        run: |
+          set -e
+          mkdir -p rule-set
+          jq -Rn '[inputs] | {version: 3, rules: [{domain_suffix: .}]}' geosite-proxy.tmp > rule-set/geosite-proxy.json
+          rm -f geosite-proxy.tmp
+
+      - name: Install sing-box
+        run: |
+          curl -fsSL https://sing-box.app/install.sh | sh
+
+      - name: Compile sing-box binary rule-set (geosite-proxy.srs)
+        run: |
+          set -e
+          /usr/bin/sing-box rule-set compile \
+            --output rule-set/geosite-proxy.srs \
+            rule-set/geosite-proxy.json
+
+      - name: Commit and push
+        run: |
+          set -e
+
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+          git add rule-set/geosite-proxy.json rule-set/geosite-proxy.srs
+          git commit -m "Auto update geosite-proxy JSON and SRS" || echo "No changes"
+
+          git pull --rebase origin main
+          git push
